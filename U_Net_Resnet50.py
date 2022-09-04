@@ -10,68 +10,36 @@ def finetuned_U_Net_Resnet50():
     input_img_shape = (512, 512, 3)
     RESNET50_encoder = resnet50.RESNET50(include_top=False, weights='imagenet', input_shape=input_img_shape)
     last_feature_extraction_layer = RESNET50_encoder.output
+    
+    activation = 'softmax'
 
     ## Freezing extraction layers
     set_trainable = False
-    for layer in RESNET50_encoder.layers:
-        if layer.name in ['block1_conv1']:
-            set_trainable = True
-        if layer.name in ['block1_pool' ,'block2_pool' ,'block3_pool' ,'block4_pool' ,'block5_pool']:
-            layer.trainable = False
+     if block_type == 'transpose':
+        up_block = Conv2DTranspose
+    else:
+        up_block = UpSampling2D
 
-    fine_tuned_u_net_model = Conv2DTranspose(256,(2,2),strides=(2, 2))(last_feature_extraction_layer)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    concat_1 = concatenate([fine_tuned_u_net_model,RESNET50_encoder.get_layer("block5_conv3").output])
+    # Skip connects for resnet 50
+    skip_layers = list(112, 56, 42, 9)
 
+    for i in range(n_upsample_blocks):
 
-    fine_tuned_u_net_model = Conv2D(512 ,(2 ,2) ,strides=(1, 1) ,padding='same')(concat_1)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = Conv2DTranspose(512 ,(3 ,2) ,strides=(2, 2) ,padding='same')(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    concat_2 = concatenate([fine_tuned_u_net_model ,RESNET50_encoder.get_layer("block4_conv3").output])
+        # check for skip connections
+        if i < len(skip_layers):
+            skip = RESNET34_encoder.layers[skip_layers[i]].output
+        else:
+            skip = None
+        up_size = (upsample_rates[i], upsample_rates[i])
+       filters = last_block_filters * 2 ** (n_upsample_blocks - (i + 1))
 
+    ly = up_block(filters, i, upsample_rate=up_size, skip=skip, **kwargs)(ly)
+        
+    ly = Conv2D(4, (3, 3), padding='same', name='final_conv')(ly)
+    ly = Activation(activation, name=activation)(ly)
 
+    fine_tuned_u_net_model = Model(input, ly)
 
-    fine_tuned_u_net_model = Conv2D(512 ,(3 ,3) ,strides=(1, 1) ,padding='same')(concat_2)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = Conv2DTranspose(512 ,(2 ,2) ,strides=(2, 2))(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    concat_3 = concatenate([fine_tuned_u_net_model,RESNET50_encoder.get_layer("block3_conv3").output])
-
-
-    fine_tuned_u_net_model = Conv2D(256 ,(3 ,3) ,strides=(1, 1) ,padding='same')(concat_3)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = Conv2DTranspose(256 ,(3 ,3) ,strides=(2, 2) ,padding='same')(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = Conv2DTranspose(256 ,(2 ,2) ,strides=(1, 1) ,padding='same')(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    concat_4 = concatenate([fine_tuned_u_net_model ,RESNET50_encoder.get_layer("block2_conv2").output])
-
-    fine_tuned_u_net_model = Conv2D(128 ,(3 ,3) ,strides=(1, 1) ,padding='same')(concat_4)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = Conv2DTranspose(128 ,(3 ,3) ,strides=(2, 2) ,padding='same')(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-    concat_5 = concatenate([fine_tuned_u_net_model ,RESNET50_encoder.get_layer("block1_conv2").output])
-
-    fine_tuned_u_net_model = Conv2D(64 ,(3 ,3) ,strides=(1, 1) ,padding='same')(concat_5)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-
-    fine_tuned_u_net_model = Conv2D(3 ,(3 ,3) ,strides=(1, 1) ,padding='same')(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = LeakyReLU(0.1)(fine_tuned_u_net_model)
-    fine_tuned_u_net_model = BatchNormalization()(fine_tuned_u_net_model)
-
-    fine_tuned_u_net_model = Model(RESNET50_encoder.input ,fine_tuned_u_net_model)
 
     return fine_tuned_u_net_model
 
